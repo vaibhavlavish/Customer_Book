@@ -208,7 +208,7 @@
 
     const itemsHtml = (plan.items || []).map(i => `
       <div class="item-row">
-        <span>${escapeHtml(i.itemName || 'Item')}</span>
+        <span>${escapeHtml(i.printName || i.itemName || 'Item')}</span>
         <span class="price">₹${(i.finalPrice || 0).toFixed(2)}</span>
       </div>
     `).join('');
