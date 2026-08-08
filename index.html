@@ -230,6 +230,11 @@
       </div>
     `;
 
+    const dueDates = plan.dueDates || [];
+    const dueDatesHtml = dueDates.length
+      ? dueDates.map(d => `<div class="item-row"><span>${formatDate(d)}</span></div>`).join('')
+      : '';
+
     contentEl.innerHTML = `
       <div class="card">
         <p class="cust-name">${escapeHtml(plan.customerName || 'Your Plan')}</p>
@@ -248,6 +253,13 @@
           <span>Paid So Far</span><span class="paid">₹${(plan.amountPaid || 0).toFixed(2)}</span>
         </div>
       </div>
+
+      ${dueDatesHtml ? `
+        <div class="card">
+          <p class="section-label">Payment Dates</p>
+          ${dueDatesHtml}
+        </div>
+      ` : ''}
 
       <div class="card">
         <p class="section-label">Payment History</p>
