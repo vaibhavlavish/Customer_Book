@@ -181,6 +181,31 @@
   }
 
   function renderPlan(plan){
+    const isCancelled = plan.status === 'cancelled';
+    const isPaidOff = !isCancelled && (plan.remainingAmount || 0) <= 0;
+
+    // Resolved (paid off or cancelled) — the plan is done, so there's
+    // nothing left to show: no items, no amounts, no payment history.
+    // Just a short confirmation and nothing else.
+    if (isCancelled || isPaidOff) {
+      const bannerHtml = isCancelled
+        ? `<div class="cancelled-banner">This plan is no longer active. Please contact the shop if you have any questions.</div>`
+        : `
+          <div class="paid-off-banner">
+            <div class="big">✅</div>
+            <p class="title">Fully Paid</p>
+            <p class="sub">Thank you! There's nothing left owing on this plan.</p>
+          </div>
+        `;
+      contentEl.innerHTML = `
+        <div class="card">
+          <p class="cust-name">${escapeHtml(plan.customerName || 'Your Plan')}</p>
+        </div>
+        ${bannerHtml}
+      `;
+      return;
+    }
+
     const itemsHtml = (plan.items || []).map(i => `
       <div class="item-row">
         <span>${escapeHtml(i.itemName || 'Item')}</span>
@@ -198,28 +223,12 @@
         `).join('')
       : '<p class="state-msg" style="padding:20px 0; font-size:13px;">No payments recorded yet.</p>';
 
-    const isCancelled = plan.status === 'cancelled';
-    const isPaidOff = !isCancelled && (plan.remainingAmount || 0) <= 0;
-
-    let bannerHtml = '';
-    if (isCancelled) {
-      bannerHtml = `<div class="cancelled-banner">This plan is no longer active. Please contact the shop if you have any questions.</div>`;
-    } else if (isPaidOff) {
-      bannerHtml = `
-        <div class="paid-off-banner">
-          <div class="big">✅</div>
-          <p class="title">Fully Paid</p>
-          <p class="sub">Thank you! There's nothing left owing on this plan.</p>
-        </div>
-      `;
-    } else {
-      bannerHtml = `
-        <div class="due-banner">
-          <p class="amt">₹${(plan.remainingAmount || 0).toFixed(2)}</p>
-          <p class="label">Remaining Balance</p>
-        </div>
-      `;
-    }
+    const bannerHtml = `
+      <div class="due-banner">
+        <p class="amt">₹${(plan.remainingAmount || 0).toFixed(2)}</p>
+        <p class="label">Remaining Balance</p>
+      </div>
+    `;
 
     contentEl.innerHTML = `
       <div class="card">
