@@ -232,7 +232,7 @@
 
     const dueDates = plan.dueDates || [];
     const dueDatesHtml = dueDates.length
-      ? dueDates.map(d => `<div class="item-row"><span>${formatDate(d)}</span></div>`).join('')
+      ? dueDates.map(d => `<div class="item-row"><span>${formatDate(d)}</span><span class="price">₹${(plan.installmentAmount || 0).toFixed(2)}</span></div>`).join('')
       : '';
 
     contentEl.innerHTML = `
