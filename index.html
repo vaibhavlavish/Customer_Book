@@ -232,7 +232,12 @@
 
     const dueDates = plan.dueDates || [];
     const dueDatesHtml = dueDates.length
-      ? dueDates.map(d => `<div class="item-row"><span>${formatDate(d)}</span><span class="price">₹${(plan.installmentAmount || 0).toFixed(2)}</span></div>`).join('')
+      ? dueDates.map((d, i) => {
+          const amt = (plan.installmentAmountMode === 'custom' && Array.isArray(plan.customInstallmentAmounts) && plan.customInstallmentAmounts[i] != null)
+            ? plan.customInstallmentAmounts[i]
+            : (plan.installmentAmount || 0);
+          return `<div class="item-row"><span>${formatDate(d)}</span><span class="price">₹${amt.toFixed(2)}</span></div>`;
+        }).join('')
       : '';
 
     contentEl.innerHTML = `
