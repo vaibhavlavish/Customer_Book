@@ -265,6 +265,13 @@
         <p class="section-label">Payment History</p>
         ${paymentsHtml}
       </div>
+
+      ${plan.webTandC ? `
+        <div class="card">
+          <p class="section-label">Terms &amp; Conditions</p>
+          <p style="font-size:12px; color:var(--ink-soft); line-height:1.6; white-space:pre-wrap; margin:0;">${escapeHtml(plan.webTandC)}</p>
+        </div>
+      ` : ''}
     `;
   }
 </script>
