@@ -213,6 +213,13 @@
       </div>
     `).join('');
 
+    const oldGoldHtml = (plan.oldGoldItems || []).map(og => `
+      <div class="item-row">
+        <span>${escapeHtml(og.desc || 'Old Jewellery')}</span>
+        <span class="price" style="color:#c0392b;">-₹${(og.value || 0).toFixed(2)}</span>
+      </div>
+    `).join('');
+
     const payments = (plan.payments || []).slice().reverse();
     const paymentsHtml = payments.length
       ? payments.map(p => `
@@ -258,6 +265,13 @@
           <span>Paid So Far</span><span class="paid">₹${(plan.amountPaid || 0).toFixed(2)}</span>
         </div>
       </div>
+
+      ${oldGoldHtml ? `
+        <div class="card">
+          <p class="section-label">Old Jewellery (Exchange)</p>
+          ${oldGoldHtml}
+        </div>
+      ` : ''}
 
       ${dueDatesHtml ? `
         <div class="card">
