@@ -213,12 +213,24 @@
       </div>
     `).join('');
 
-    const oldGoldHtml = (plan.oldGoldItems || []).map(og => `
-      <div class="item-row">
-        <span>${escapeHtml(og.desc || 'Old Jewellery')}</span>
-        <span class="price" style="color:#c0392b;">-₹${(og.value || 0).toFixed(2)}</span>
-      </div>
-    `).join('');
+    const itemSum = (plan.items || []).reduce((s, i) => s + (i.finalPrice || 0), 0);
+    const oldGoldTotal = (plan.oldGoldItems || []).reduce((s, og) => s + (og.value || 0), 0);
+    const oldGoldHtml = (plan.oldGoldItems || []).length
+      ? `<div class="item-row"><span>Old Jewellery</span><span class="price" style="color:#c0392b;">-₹${oldGoldTotal.toFixed(2)}</span></div>`
+      : '';
+
+    // Reconciles the same way the printed slip does — plan.totalAmount can
+    // differ slightly from (items − old jewellery) once custom installment
+    // amounts have been rounded to neat numbers. Shown only when there's
+    // an actual difference worth accounting for.
+    const rawTotal = Math.round((itemSum - oldGoldTotal) * 100) / 100;
+    const roundOff = Math.round(((plan.totalAmount || 0) - rawTotal) * 100) / 100;
+    const roundOffHtml = Math.abs(roundOff) > 0.005
+      ? `<div class="item-row"><span>Round Off</span><span class="price">${roundOff > 0 ? '+' : '-'}₹${Math.abs(roundOff).toFixed(2)}</span></div>`
+      : '';
+
+    const downPaymentEntry = (plan.payments || []).find(p => p.note === 'Down payment');
+    const downPaymentAmount = downPaymentEntry ? (downPaymentEntry.amount || 0) : 0;
 
     const payments = (plan.payments || []).slice().reverse();
     const paymentsHtml = payments.length
@@ -238,14 +250,43 @@
     `;
 
     const dueDates = plan.dueDates || [];
-    const dueDatesHtml = dueDates.length
-      ? dueDates.map((d, i) => {
-          const amt = (plan.installmentAmountMode === 'custom' && Array.isArray(plan.customInstallmentAmounts) && plan.customInstallmentAmounts[i] != null)
-            ? plan.customInstallmentAmounts[i]
-            : (plan.installmentAmount || 0);
-          return `<div class="item-row"><span>${formatDate(d)}</span><span class="price">₹${amt.toFixed(2)}</span></div>`;
-        }).join('')
-      : '';
+    // Payments aren't tied to a specific due date — someone might pay
+    // early, late, or a different amount than that installment. So rather
+    // than trying to match a payment to a date, this applies everything
+    // paid BEYOND the down payment against the schedule in order, oldest
+    // first. A date fully covered by that running total is hidden
+    // entirely. The first date NOT fully covered shows what's actually
+    // still owed toward it — any partial credit rolled forward from
+    // over-covering an earlier installment reduces that figure, so
+    // overpaying naturally shrinks what's shown as due next, and
+    // underpaying shows the true remaining amount rather than the full
+    // scheduled one. Every date after that first partial one shows its
+    // normal full scheduled amount, since the pool is spent by then. This
+    // never needs to know WHEN a payment happened, only how much in total.
+    let _pool = Math.max(0, (plan.amountPaid || 0) - downPaymentAmount);
+    let _partialApplied = false;
+    const visibleDueDates = [];
+    dueDates.forEach((d, i) => {
+      const amt = (plan.installmentAmountMode === 'custom' && Array.isArray(plan.customInstallmentAmounts) && plan.customInstallmentAmounts[i] != null)
+        ? plan.customInstallmentAmounts[i]
+        : (plan.installmentAmount || 0);
+
+      if (!_partialApplied && _pool >= amt - 0.01) {
+        _pool -= amt; // fully covered — hidden
+        return;
+      }
+      if (!_partialApplied && _pool > 0.005) {
+        const remaining = Math.round((amt - _pool) * 100) / 100;
+        _pool = 0;
+        _partialApplied = true;
+        visibleDueDates.push({ date: d, amt, remaining, isPartial: true });
+        return;
+      }
+      visibleDueDates.push({ date: d, amt, remaining: amt, isPartial: false });
+    });
+    const dueDatesHtml = visibleDueDates
+      .map(x => `<div class="item-row"><span>${formatDate(x.date)}</span><span class="price">${x.isPartial ? `Pay Remaining: ₹${x.remaining.toFixed(2)}` : `₹${x.amt.toFixed(2)}`}</span></div>`)
+      .join('');
 
     contentEl.innerHTML = `
       <div class="card">
@@ -253,25 +294,25 @@
         <p class="cust-sub">Started ${plan.createdAt ? formatDate(plan.createdAt) : ''}</p>
       </div>
 
-      ${bannerHtml}
-
       <div class="card">
         <p class="section-label">Items</p>
         ${itemsHtml}
+        ${oldGoldHtml}
+        ${roundOffHtml}
         <div class="summary-row total">
-          <span>Total Amount</span><span>₹${(plan.totalAmount || 0).toFixed(2)}</span>
+          <span>Total Payable</span><span>₹${(plan.totalAmount || 0).toFixed(2)}</span>
         </div>
+        ${downPaymentAmount > 0 ? `
+          <div class="summary-row">
+            <span>Down Payment</span><span>₹${downPaymentAmount.toFixed(2)}</span>
+          </div>
+        ` : ''}
         <div class="summary-row">
           <span>Paid So Far</span><span class="paid">₹${(plan.amountPaid || 0).toFixed(2)}</span>
         </div>
       </div>
 
-      ${oldGoldHtml ? `
-        <div class="card">
-          <p class="section-label">Old Jewellery (Exchange)</p>
-          ${oldGoldHtml}
-        </div>
-      ` : ''}
+      ${bannerHtml}
 
       ${dueDatesHtml ? `
         <div class="card">
