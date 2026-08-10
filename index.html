@@ -208,10 +208,16 @@
 
     const itemsHtml = (plan.items || []).map(i => `
       <div class="item-row">
-        <span>${escapeHtml(i.printName || i.itemName || 'Item')}</span>
+        <span>${escapeHtml(i.printName || i.itemName || 'Item')}${plan.rateCancelled ? ' <span style="color:#c0392b; font-weight:700; font-size:12px;">(Rate Cancelled)</span>' : ''}</span>
         <span class="price">₹${(i.finalPrice || 0).toFixed(2)}</span>
       </div>
     `).join('');
+
+    const rateCancelledBannerHtml = plan.rateCancelled ? `
+      <div class="card" style="background:#FDEDEC; border-color:#f5c6c2;">
+        <p style="margin:0; font-size:13px; font-weight:700; color:#c0392b; line-height:1.5;">⚠️ The rate originally fixed for this plan is no longer guaranteed. Please contact the shop for the current applicable rate.</p>
+      </div>
+    ` : '';
 
     const itemSum = (plan.items || []).reduce((s, i) => s + (i.finalPrice || 0), 0);
     const oldGoldTotal = (plan.oldGoldItems || []).reduce((s, og) => s + (og.value || 0), 0);
@@ -293,6 +299,8 @@
         <p class="cust-name">${escapeHtml(plan.customerName || 'Your Plan')}</p>
         <p class="cust-sub">Started ${plan.createdAt ? formatDate(plan.createdAt) : ''}</p>
       </div>
+
+      ${rateCancelledBannerHtml}
 
       <div class="card">
         <p class="section-label">Items</p>
