@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#3B0E17">
-<title>Suhag Jewellers — Your Savings Scheme</title>
+<title>Suhag Jewellers — Your Installment Plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -83,14 +83,6 @@
     padding:16px 18px; text-align:center; margin-bottom:16px; color:#C62828; font-weight:700; font-size:13.5px;
   }
 
-  .progress-track{
-    background:#F2EBDA; border-radius:999px; height:10px; overflow:hidden; margin:10px 0 4px;
-  }
-  .progress-fill{
-    background:linear-gradient(90deg, var(--gold), #D8B879); height:100%; border-radius:999px;
-  }
-  .progress-label{font-size:12px; color:var(--ink-soft); text-align:center; margin:0;}
-
   .section-label{
     font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
     color:var(--ink-soft); margin:0 0 10px;
@@ -118,7 +110,7 @@
       <p class="shop-name display"><em>Suhag</em> Jewellers</p>
     </div>
   </div>
-  <p class="header-sub">Your Savings Scheme</p>
+  <p class="header-sub">Your Installment Plan</p>
 </header>
 
 <main>
@@ -170,7 +162,7 @@
     // the link IS the access — nothing about this page can browse to any
     // other customer's plan, because it never asks Firebase for anything
     // broader than this one specific path.
-    const planRef = ref(db, 'savingsPlans/' + planId);
+    const planRef = ref(db, 'installments/' + planId);
     onValue(planRef, snap => {
       const plan = snap.val();
       loadingEl.style.display = 'none';
@@ -190,51 +182,116 @@
 
   function renderPlan(plan){
     const isCancelled = plan.status === 'cancelled';
-    const isCompleted = plan.status === 'completed';
-    const totalMonths = plan.totalMonths || 0;
-    const monthsPaid = Math.min((plan.payments || []).length, totalMonths);
-    const amountPaid = (plan.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+    const isPaidOff = !isCancelled && (plan.remainingAmount || 0) <= 0;
 
-    if (isCancelled) {
+    // Resolved (paid off or cancelled) — the plan is done, so there's
+    // nothing left to show: no items, no amounts, no payment history.
+    // Just a short confirmation and nothing else.
+    if (isCancelled || isPaidOff) {
+      const bannerHtml = isCancelled
+        ? `<div class="cancelled-banner">This plan is no longer active. Please contact the shop if you have any questions.</div>`
+        : `
+          <div class="paid-off-banner">
+            <div class="big">✅</div>
+            <p class="title">Fully Paid</p>
+            <p class="sub">Thank you! There's nothing left owing on this plan.</p>
+          </div>
+        `;
       contentEl.innerHTML = `
         <div class="card">
           <p class="cust-name">${escapeHtml(plan.customerName || 'Your Plan')}</p>
         </div>
-        <div class="cancelled-banner">This plan is no longer active. Please contact the shop if you have any questions.</div>
+        ${bannerHtml}
       `;
       return;
     }
 
-    if (isCompleted) {
-      const totalValue = amountPaid + (plan.bonusAmount || 0);
-      contentEl.innerHTML = `
-        <div class="card">
-          <p class="cust-name">${escapeHtml(plan.customerName || 'Your Plan')}</p>
-          <p class="cust-sub">Started ${plan.createdAt ? formatDate(plan.createdAt) : ''}</p>
-        </div>
-        <div class="paid-off-banner">
-          <div class="big">✅</div>
-          <p class="title">Fully Paid — ₹${totalValue.toFixed(2)} Ready to Redeem</p>
-          <p class="sub">You paid ₹${amountPaid.toFixed(2)} over ${totalMonths} months, and we've added a ₹${(plan.bonusAmount || 0).toFixed(2)} bonus on top. Visit the shop to redeem this against your purchase.</p>
-        </div>
-        <div class="card">
-          <p class="section-label">Payment History</p>
-          ${renderPaymentsHtml(plan)}
-        </div>
-      `;
-      return;
-    }
+    const itemsHtml = (plan.items || []).map(i => `
+      <div class="item-row">
+        <span>${escapeHtml(i.printName || i.itemName || 'Item')}${plan.rateCancelled ? ' <span style="color:#c0392b; font-weight:700; font-size:12px;">(Rate Cancelled)</span>' : ''}</span>
+        <span class="price">₹${(i.finalPrice || 0).toFixed(2)}</span>
+      </div>
+    `).join('');
 
-    // Active — show progress toward the goal, the next due dates, and the
-    // full payment history so far. The bonus is deliberately NOT shown as
-    // part of any running total here — it only applies once the plan is
-    // genuinely completed, so promising it early could cause confusion if
-    // the plan is ever cancelled before that point.
-    const pct = totalMonths > 0 ? Math.min(100, Math.round((monthsPaid / totalMonths) * 100)) : 0;
+    const rateCancelledBannerHtml = plan.rateCancelled ? `
+      <div class="card" style="background:#FDEDEC; border-color:#f5c6c2;">
+        <p style="margin:0; font-size:13px; font-weight:700; color:#c0392b; line-height:1.5;">⚠️ The rate originally fixed for this plan is no longer guaranteed. Please contact the shop for the current applicable rate.</p>
+      </div>
+    ` : '';
+
+    const itemSum = (plan.items || []).reduce((s, i) => s + (i.finalPrice || 0), 0);
+    const oldGoldTotal = (plan.oldGoldItems || []).reduce((s, og) => s + (og.value || 0), 0);
+    const oldGoldHtml = (plan.oldGoldItems || []).length
+      ? `<div class="item-row"><span>Old Jewellery</span><span class="price" style="color:#c0392b;">-₹${oldGoldTotal.toFixed(2)}</span></div>`
+      : '';
+
+    // Reconciles the same way the printed slip does — plan.totalAmount can
+    // differ slightly from (items − old jewellery) once custom installment
+    // amounts have been rounded to neat numbers. Shown only when there's
+    // an actual difference worth accounting for.
+    const rawTotal = Math.round((itemSum - oldGoldTotal) * 100) / 100;
+    const roundOff = Math.round(((plan.totalAmount || 0) - rawTotal) * 100) / 100;
+    const roundOffHtml = Math.abs(roundOff) > 0.005
+      ? `<div class="item-row"><span>Round Off</span><span class="price">${roundOff > 0 ? '+' : '-'}₹${Math.abs(roundOff).toFixed(2)}</span></div>`
+      : '';
+
+    const downPaymentEntry = (plan.payments || []).find(p => p.note === 'Down payment');
+    const downPaymentAmount = downPaymentEntry ? (downPaymentEntry.amount || 0) : 0;
+
+    const payments = (plan.payments || []).slice().reverse();
+    const paymentsHtml = payments.length
+      ? payments.map(p => `
+          <div class="payment-row">
+            <span class="date">${formatDate(p.date)}${p.note ? `<span class="payment-note">${escapeHtml(p.note)}</span>` : ''}</span>
+            <span class="amt">₹${(p.amount || 0).toFixed(2)}</span>
+          </div>
+        `).join('')
+      : '<p class="state-msg" style="padding:20px 0; font-size:13px;">No payments recorded yet.</p>';
+
+    const bannerHtml = `
+      <div class="due-banner">
+        <p class="amt">₹${(plan.remainingAmount || 0).toFixed(2)}</p>
+        <p class="label">Remaining Balance</p>
+      </div>
+    `;
+
     const dueDates = plan.dueDates || [];
-    const upcomingDueDates = dueDates.slice(monthsPaid);
-    const dueDatesHtml = upcomingDueDates
-      .map(d => `<div class="item-row"><span>${formatDate(d)}</span><span class="price">₹${(plan.monthlyAmount || 0).toFixed(2)}</span></div>`)
+    // Payments aren't tied to a specific due date — someone might pay
+    // early, late, or a different amount than that installment. So rather
+    // than trying to match a payment to a date, this applies everything
+    // paid BEYOND the down payment against the schedule in order, oldest
+    // first. A date fully covered by that running total is hidden
+    // entirely. The first date NOT fully covered shows what's actually
+    // still owed toward it — any partial credit rolled forward from
+    // over-covering an earlier installment reduces that figure, so
+    // overpaying naturally shrinks what's shown as due next, and
+    // underpaying shows the true remaining amount rather than the full
+    // scheduled one. Every date after that first partial one shows its
+    // normal full scheduled amount, since the pool is spent by then. This
+    // never needs to know WHEN a payment happened, only how much in total.
+    let _pool = Math.max(0, (plan.amountPaid || 0) - downPaymentAmount);
+    let _partialApplied = false;
+    const visibleDueDates = [];
+    dueDates.forEach((d, i) => {
+      const amt = (plan.installmentAmountMode === 'custom' && Array.isArray(plan.customInstallmentAmounts) && plan.customInstallmentAmounts[i] != null)
+        ? plan.customInstallmentAmounts[i]
+        : (plan.installmentAmount || 0);
+
+      if (!_partialApplied && _pool >= amt - 0.01) {
+        _pool -= amt; // fully covered — hidden
+        return;
+      }
+      if (!_partialApplied && _pool > 0.005) {
+        const remaining = Math.round((amt - _pool) * 100) / 100;
+        _pool = 0;
+        _partialApplied = true;
+        visibleDueDates.push({ date: d, amt, remaining, isPartial: true });
+        return;
+      }
+      visibleDueDates.push({ date: d, amt, remaining: amt, isPartial: false });
+    });
+    const dueDatesHtml = visibleDueDates
+      .map(x => `<div class="item-row"><span>${formatDate(x.date)}</span><span class="price">${x.isPartial ? `Pay Remaining: ₹${x.remaining.toFixed(2)}` : `₹${x.amt.toFixed(2)}`}</span></div>`)
       .join('');
 
     contentEl.innerHTML = `
@@ -243,42 +300,47 @@
         <p class="cust-sub">Started ${plan.createdAt ? formatDate(plan.createdAt) : ''}</p>
       </div>
 
+      ${rateCancelledBannerHtml}
+
       <div class="card">
-        <p class="section-label">Progress</p>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
-        <p class="progress-label">${monthsPaid} of ${totalMonths} months paid</p>
-        <div class="summary-row" style="margin-top:12px;">
-          <span>Monthly Amount</span><span>₹${(plan.monthlyAmount || 0).toFixed(2)}</span>
-        </div>
+        <p class="section-label">Items</p>
+        ${itemsHtml}
+        ${oldGoldHtml}
+        ${roundOffHtml}
         <div class="summary-row total">
-          <span>Paid So Far</span><span class="paid">₹${amountPaid.toFixed(2)}</span>
+          <span>Total Payable</span><span>₹${(plan.totalAmount || 0).toFixed(2)}</span>
+        </div>
+        ${downPaymentAmount > 0 ? `
+          <div class="summary-row">
+            <span>Down Payment</span><span>₹${downPaymentAmount.toFixed(2)}</span>
+          </div>
+        ` : ''}
+        <div class="summary-row">
+          <span>Paid So Far</span><span class="paid">₹${(plan.amountPaid || 0).toFixed(2)}</span>
         </div>
       </div>
 
+      ${bannerHtml}
+
       ${dueDatesHtml ? `
         <div class="card">
-          <p class="section-label">Upcoming Payment Dates</p>
+          <p class="section-label">Payment Dates</p>
           ${dueDatesHtml}
         </div>
       ` : ''}
 
       <div class="card">
         <p class="section-label">Payment History</p>
-        ${renderPaymentsHtml(plan)}
+        ${paymentsHtml}
       </div>
-    `;
-  }
 
-  function renderPaymentsHtml(plan){
-    const payments = (plan.payments || []).slice().reverse();
-    return payments.length
-      ? payments.map(p => `
-          <div class="payment-row">
-            <span class="date">${formatDate(p.date)}${p.note ? `<span class="payment-note">${escapeHtml(p.note)}</span>` : ''}</span>
-            <span class="amt">₹${(p.amount || 0).toFixed(2)}</span>
-          </div>
-        `).join('')
-      : '<p class="state-msg" style="padding:20px 0; font-size:13px;">No payments recorded yet.</p>';
+      ${plan.webTandC ? `
+        <div class="card">
+          <p class="section-label">Terms &amp; Conditions</p>
+          <p style="font-size:12px; color:var(--ink-soft); line-height:1.6; white-space:pre-wrap; margin:0;">${escapeHtml(plan.webTandC)}</p>
+        </div>
+      ` : ''}
+    `;
   }
 </script>
 
